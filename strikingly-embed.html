@@ -1,0 +1,21 @@
+<!-- Strikingly の HTML 埋め込み欄に貼るコード例。GitHub Pages 公開後にURLを確認してください。 -->
+<iframe
+  id="hime-event-frame"
+  title="夢羽ヒメ 最新イベント・グッズ・配信情報"
+  src="https://yumeha-hime-fansite.github.io/hime-event-hub/?mode=embed"
+  loading="lazy"
+  style="display:block;width:100%;height:980px;max-width:100%;border:0;background:transparent"
+></iframe>
+<script>
+  window.addEventListener('message', function (event) {
+    if (event.origin !== 'https://yumeha-hime-fansite.github.io') return;
+    if (!event.data || event.data.type !== 'hime-event-hub:resize') return;
+    var frame = document.getElementById('hime-event-frame');
+    if (frame && event.source === frame.contentWindow) {
+      var height = Number(event.data.height);
+      if (Number.isFinite(height) && height > 0) {
+        frame.style.height = Math.max(320, Math.min(8000, height + 8)) + 'px';
+      }
+    }
+  });
+</script>
