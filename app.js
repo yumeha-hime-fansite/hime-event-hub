@@ -39,6 +39,27 @@
     if (a) return `${a[1]}-${a[2].padStart(2,'0')}-${a[3].padStart(2,'0')}`;
     return '';
   }
+  // Google Sheets (Visualization API) は「時刻」を Date(1899,11,30,18,0,0) の形式で返すことがある。
+  // 表示用の時刻は日付として扱わず、時・分をそのまま取り出す。
+  function readTime(value) {
+    if(value == null || value === '') return '';
+    const pad = n => String(n).padStart(2, '0');
+    if(value instanceof Date && !Number.isNaN(value.getTime())) {
+      return `${pad(value.getHours())}:${pad(value.getMinutes())}`;
+    }
+    if(typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1) {
+      const minutes = Math.round(value * 24 * 60);
+      return `${pad(Math.floor(minutes / 60) % 24)}:${pad(minutes % 60)}`;
+    }
+    const t = String(value).trim();
+    const googleTime = t.match(/^Date\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*(\d{1,2})\s*,\s*(\d{1,2})(?:\s*,\s*\d{1,2})?\s*\)$/);
+    if(googleTime) return `${pad(googleTime[1])}:${pad(googleTime[2])}`;
+    const clock = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if(clock) return `${pad(clock[1])}:${clock[2]}`;
+    const jp = t.match(/^(\d{1,2})時(?:\s*(\d{1,2})分?)?$/);
+    if(jp) return `${pad(jp[1])}:${pad(jp[2] || 0)}`;
+    return t;
+  }
   function shownValue(x) {return !['0','false','off','no','非表示','×'].includes(String(x??'TRUE').trim().toLowerCase());}
   const str = v => String(v == null ? '' : v).trim();
   function normalize(r) {
@@ -51,7 +72,7 @@
       start: readDate(o.start_date || o['開始日']),
       end: readDate(o.end_date || o['終了日']),
       label: str(o.date_label || o['日付表示']),
-      time: str(o.time || o['時刻']),place: str(o.place || o['場所']),
+      time: readTime(o.time ?? o['時刻']),place: str(o.place || o['場所']),
       summary: str(o.summary || o['画像用の説明']),
       details: str(o.details || o['投稿用の説明']),
       url: str(o.url || o['公式url'] || o['url']),
@@ -134,7 +155,6 @@
   }
   function renderX(){
     $('post-text').value=buildDraft(shown);
-    renderThread(shown);
     const pages=pageCount();
     currentPage=Math.min(Math.max(currentPage,0),pages-1);
     $('page-no').textContent=`${currentPage+1} / ${pages}`;
@@ -156,53 +176,6 @@
     }
     out.push('※最新情報・詳細は必ず公式告知をご確認ください。','#夢羽ヒメ');
     return out.join('\n').replace(/\n{3,}/g,'\n\n').trim();
-  }
-  // Xの通常投稿を想定して短く分ける。リンクを一律23文字として概算し、投稿前の確認を促す。
-  function xLength(s){return [...String(s).replace(/https?:\/\/[^\s]+/g,'x'.repeat(23))].length;}
-  function threadDraft(events){
-    const intro=['👑💜夢羽ヒメさんの最新情報まとめ','🎤ライブ・イベント / 🎁グッズ / 📺配信','くわしい内容は画像とリンク先をご確認ください！','#夢羽ヒメ'];
-    if(demo)intro.unshift('【架空のデモ情報】');
-    if(safeUrl(cfg.siteUrl))intro.push(safeUrl(cfg.siteUrl));
-    const posts=[intro.join('\n')];
-    for(const cat of CATS){
-      const list=events.filter(e=>e.category===cat);if(!list.length)continue;
-      const heading=`${THEMES[cat].emoji} ${cat}情報`;
-      let current=heading;
-      for(const e of list){
-        let title=e.title;
-        let when=`📅 ${eventWhen(e)}${e.place?'　📍'+e.place:''}`;
-        const url=safeUrl(e.url);
-        let short=e.summary || e.details;
-        let block=`\n\n${title}\n${when}${short?'\n'+short:''}${url?'\n🔗'+url:''}`;
-        // 1件でも長すぎる場合、詳細文だけ短縮。長いタイトルはサイトに全文掲載。
-        if(xLength(heading+block)>245){
-          short=[...short].slice(0,Math.max(0,230-xLength(heading+title+when+url)-12)).join('');
-          block=`\n\n${title}\n${when}${short?'\n'+short+'…':''}${url?'\n🔗'+url:''}`;
-        }
-        if(xLength(heading+block)>260){
-          title=[...title].slice(0,50).join('')+'…';
-          block=`\n\n${title}\n${when}${url?'\n🔗'+url:''}`;
-        }
-        if(xLength(current+block)>260){posts.push(current);current=heading+block;}
-        else current+=block;
-      }
-      if(current!==heading)posts.push(current);
-    }
-    return posts;
-  }
-  function renderThread(events){
-    const root=$('thread-parts');root.replaceChildren();
-    threadDraft(events).forEach((t,i)=>{
-      const card=document.createElement('div');card.className='thread-part';
-      const head=document.createElement('div');head.className='thread-part-head';
-      const name=document.createElement('strong');name.textContent=`投稿 ${i+1}`;
-      const btn=document.createElement('button');btn.type='button';btn.textContent='この投稿をコピー';
-      btn.onclick=async()=>{try{await navigator.clipboard.writeText(t);btn.textContent='コピーしました ♡';}catch{btn.textContent='コピーに失敗しました';}};
-      head.append(name,btn);card.append(head);
-      const pre=document.createElement('pre');pre.textContent=t;card.append(pre);
-      const meta=document.createElement('div');meta.className='thread-part-meta';meta.textContent=`約 ${xLength(t)} 文字（URL 23文字換算の目安）`;
-      card.append(meta);root.append(card);
-    });
   }
   // Canvasで16:9のX用画像を直接生成。キャラクターは元PNGを無加工で読み込んで配置します。
   const canvas=$('poster'),ctx=canvas.getContext('2d');
