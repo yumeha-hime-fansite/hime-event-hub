@@ -19,11 +19,12 @@
     {category:'配信',title:'定期歌枠（サンプル）',date_label:'毎週水曜',start_date:'',end_date:'',time:'20:00',place:'YouTube',summary:'毎週の定期歌枠はこちらから',details:'こちらは機能確認用の架空データです。',url:'https://www.youtube.com/@hime.yumeha',priority:'3',show:'TRUE'}
   ];
   const $ = id => document.getElementById(id);
-  const todayISO = (() => {
+  function tokyoTodayISO() {
     const p = new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
     const get = k => p.find(x=>x.type === k)?.value || '';
     return `${get('year')}-${get('month')}-${get('day')}`;
-  })();
+  }
+  let todayISO = tokyoTodayISO();
   let items = [], shown = [], currentPage = 0, filter = 'すべて', demo = !cfg.sheetId;
   const modeParam = new URLSearchParams(location.search).get('mode');
   const embed = modeParam === 'embed';
@@ -118,10 +119,20 @@
       document.head.appendChild(script);
     });
   }
+  let sheetLoadedAt = 0;
+  let sheetLoading = false;
   function showAlert(s) {$('alert').textContent=s;$('alert').hidden=false;}
+  function hideAlert() {$('alert').textContent='';$('alert').hidden=true;}
+  function syncLabel(){
+    if(!sheetLoadedAt) return `${todayISO.replaceAll('-','.')} 時点の表示`;
+    const fmt=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+    return `情報取得 ${fmt.format(new Date(sheetLoadedAt))}`;
+  }
   function render(){
+    // 日付をまたいだまま開いている場合も、終了済みの情報を自動で除外する。
+    todayISO = tokyoTodayISO();
     shown=items.filter(isCurrent).sort(sorting);
-    $('updated-site').textContent=`${todayISO.replaceAll('-','.')} 時点の表示`; $('updated-x').textContent=`${todayISO.replaceAll('-','.')} 時点`;
+    $('updated-site').textContent=syncLabel(); $('updated-x').textContent=syncLabel();
     $('count').textContent=`${shown.length} 件掲載`;
     $('demo-notice').hidden=!demo;
     $('nav-site').classList.toggle('active',mode==='site');$('nav-x').classList.toggle('active',mode==='x');
@@ -162,7 +173,7 @@
     renderPoster(currentPage,pages);
   }
   function buildDraft(events){
-    const out=['📣夢羽ヒメさんのライブ・イベント・グッズ・配信情報👑💜','最新情報をまとめました！'];
+    const out=['📣#夢羽ヒメ さんのライブ・イベント・グッズ・配信情報👑💜','最新情報をまとめました！'];
     if(demo)out.push('【デモ：以下は架空のサンプルです】');
     for(const cat of CATS){
       const section=events.filter(e=>e.category===cat);if(!section.length)continue;
@@ -250,7 +261,6 @@
     font(25,400,true);ctx.fillStyle='#ad7aaf';ctx.fillText('♡ unofficial fan info ♡',800,202);ctx.textAlign='left';
     star(270,67,15,'#eed19e');star(1336,136,17,'#e7afc9');flower(178,187,22,'#deade2');flower(1438,194,25,'#dbbcf0');heart(330,187,13,'#eac6df');heart(1280,70,11,'#eac6df');
     tape(420,30,88,'#eed3f2',-.21);tape(1176,37,87,'#e3d9f8',.17);
-    font(22,900);ctx.textAlign='right';ctx.fillStyle='#a386b5';ctx.fillText(`${page+1} / ${pages}`,1528,232);ctx.textAlign='left';
   }
   function paperPanel(x,y,w,h,group,entries,idx,page){
     ctx.save();ctx.shadowColor='#ad87c766';ctx.shadowBlur=15;ctx.shadowOffsetY=8;
@@ -267,7 +277,7 @@
     if(!entries.length){font(26,500,true);ctx.fillStyle='#ac95b9';ctx.textAlign='center';ctx.fillText(page?'ほかの情報をチェックしてね ♡':'新しいお知らせをお楽しみに ♡',x+w/2,y+164);ctx.textAlign='left';return;}
     entries.forEach((e,k)=>{
       const itemY=y+121+k*79;
-      if(k){ctx.save();ctx.setLineDash([4,7]);ctx.strokeStyle='#d6b8e1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+36,itemY-19);ctx.lineTo(x+w-36,itemY-19);ctx.stroke();ctx.restore();}
+      // 本文の行間には破線を引かず、文字との重なりを防ぐ。
       heart(x+41,itemY-10,10,group.ink);
       const text=fitText(e.title,w-119,32,23);font(text.size,900);ctx.fillStyle='#655073';ctx.fillText(text.text,x+69,itemY);
       let when=eventWhen(e);if(e.place)when+='　⌖ '+e.place;
@@ -314,12 +324,38 @@
       catch{const el=$('post-text');el.focus();el.select();$('copy-status').textContent='文章を選択しました。コピーしてください';}
     });
   }
-  async function init(){
+  async function refreshSheet(force=false){
+    if(demo || sheetLoading) return;
+    // 戻ってきた直後などの短時間の連続リクエストは避ける。
+    if(!force && Date.now()-sheetLoadedAt < 30_000) return;
+    sheetLoading=true;
+    try{
+      const incoming = (await loadSheet()).map(normalize);
+      items=incoming;
+      sheetLoadedAt=Date.now();
+      hideAlert();
+      render();
+    }catch(e){
+      console.error('スプレッドシート更新エラー',e);
+      // 一時的な通信障害では直前の成功データを保持する。
+      showAlert('最新情報を取得できませんでした。前回のデータを表示しています。再読み込みで再試行できます。');
+      if(!sheetLoadedAt)render();
+    }finally{
+      sheetLoading=false;
+    }
+  }
+  function init(){
     bind();
     document.fonts.ready.then(()=>renderX());
     if(demo){items=DEMO.map(normalize);render();return;}
-    try{items=(await loadSheet()).map(normalize);render();}
-    catch(e){console.error(e);showAlert('シートを読み込めませんでした：'+(e.message||'不明なエラー')+'。公開設定とconfig.jsをご確認ください。');items=[];render();}
+    refreshSheet(true); // 初回ロードは必ず取得
+    // 定期ポーリングはしない。初回・通常再読込・タブ復帰時だけ取得する。
+    document.addEventListener('visibilitychange',()=>{
+      if(mode==='site' && !document.hidden)refreshSheet();
+    });
+    window.addEventListener('pageshow',event=>{
+      if(event.persisted && mode==='site')refreshSheet();
+    });
   }
   init();
 })();

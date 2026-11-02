@@ -9,9 +9,36 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Yomogi&family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <script src="config.js"></script>
-  <script defer src="app.js"></script>
+  <!-- 各アクセスで最新版を読み込む。GitHub Pages のブラウザキャッシュ対策。 -->
+  <script>
+    (() => {
+      const revision = Date.now();
+      const stylesheet = document.createElement('link');
+      stylesheet.rel = 'stylesheet';
+      stylesheet.href = 'style.css?v=' + revision;
+      document.head.appendChild(stylesheet);
+      document.addEventListener('DOMContentLoaded', async () => {
+        const load = (filename) => new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = filename + '?v=' + revision;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error(filename + ' の読み込みに失敗しました'));
+          document.head.appendChild(script);
+        });
+        try {
+          await load('config.js');
+          await load('app.js');
+        } catch (error) {
+          const alert = document.getElementById('alert');
+          if(alert) {
+            alert.textContent = '最新データの読み込みに失敗しました。通信状況をご確認のうえ、ページを再読み込みしてください。';
+            alert.hidden = false;
+          }
+          console.error(error);
+        }
+      }, {once:true});
+    })();
+  </script>
 </head>
 <body>
   <header class="topbar">
