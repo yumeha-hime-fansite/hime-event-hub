@@ -4,8 +4,8 @@
  * GitHub の画像は assets/hime-left.png / assets/hime-right.png に保存。
  */
 window.HIME_CONFIG = {
-  sheetId: '',    // IDを入れるとデモ情報の代わりに公開シートを読み込みます
-  sheetGid: '0',   // シートタブの gid
+  sheetId: '1i60vSw6kT3H0Of9KBfmsoVjWLkMaCpwiqCM5ui1jat8',
+  sheetGid: '1328131466',
   siteName: '夢羽ヒメ',
-  siteUrl: ''    // 任意。X投稿の案内に載せたい実際のサイトURLを入力
+  siteUrl: 'https://www.yumeha-hime-fansite.com/'
 };
