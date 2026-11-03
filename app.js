@@ -29,7 +29,7 @@
   const modeParam = new URLSearchParams(location.search).get('mode');
   const embed = modeParam === 'embed';
   let mode = modeParam === 'x' ? 'x' : 'site';
-  if (embed) document.body.classList.add('embed-mode');
+  if (embed) { document.body.classList.add('embed-mode'); document.documentElement.classList.add('embedded-document'); }
   function readDate(s) {
     if(s instanceof Date && !Number.isNaN(s.getTime())) return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
     s = String(s == null ? '' : s).trim();
@@ -300,16 +300,31 @@
       const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=`yumeha-hime-info-${todayISO}-${n+1}.png`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),10000);resolve();
     },'image/png'));
   }
+  // Embed mode: measure the content, not document.scrollHeight.
+  // document.scrollHeight can reflect iframe viewport height and create an
+  // infinite parent-child resize feedback loop when the parent adds padding.
+  let lastEmbedHeight = 0;
+  let pendingEmbedFrame = false;
   function notifyEmbedHeight(){
-    if(!embed || window.parent===window) return;
+    if(!embed || window.parent===window || pendingEmbedFrame) return;
+    pendingEmbedFrame=true;
     requestAnimationFrame(()=>{
-      const height=Math.ceil(document.documentElement.scrollHeight);
-      window.parent.postMessage({type:'hime-event-hub:resize',height},'*');
+      pendingEmbedFrame=false;
+      const main = document.querySelector('main.main');
+      if(!main) return;
+      const height = Math.max(120, Math.ceil(main.getBoundingClientRect().height) + 2);
+      if(Math.abs(height-lastEmbedHeight) < 2) return;
+      lastEmbedHeight=height;
+      // Public height only; parent checks both origin and event source.
+      window.parent.postMessage({type:'hime-event-hub:fit',height},'*');
     });
   }
   if(embed){
-    window.addEventListener('resize',notifyEmbedHeight);
-    if(typeof ResizeObserver!=='undefined') new ResizeObserver(notifyEmbedHeight).observe(document.querySelector('main'));
+    const main=document.querySelector('main.main');
+    if(typeof ResizeObserver!=='undefined') new ResizeObserver(notifyEmbedHeight).observe(main);
+    else window.addEventListener('resize',notifyEmbedHeight);
+    document.fonts.ready.then(notifyEmbedHeight);
+    window.addEventListener('load',notifyEmbedHeight);
   }
   function bind(){
     $('prev').addEventListener('click',()=>{if(currentPage>0){currentPage--;renderX();}});
