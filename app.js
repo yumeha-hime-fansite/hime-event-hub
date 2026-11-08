@@ -1,12 +1,11 @@
 'use strict';
 (() => {
   const cfg = window.HIME_CONFIG || {};
-  const CATS = ['ライブ','イベント','キャンペーン','グッズ','配信','その他'];
+  const CATS = ['ライブ・イベント','グッズ','キャンペーン','配信','その他'];
   const THEMES = {
-    'ライブ': {bg:'#fce5ef',fg:'#b84878',emoji:'🎤'},
-    'イベント': {bg:'#f1e4fb',fg:'#8850bb',emoji:'🎪'},
-    'キャンペーン': {bg:'#fff0d7',fg:'#b8762b',emoji:'🎉'},
+    'ライブ・イベント': {bg:'#fce5ef',fg:'#b84878',emoji:'🎤'},
     'グッズ': {bg:'#e5f2f3',fg:'#337c88',emoji:'🎁'},
+    'キャンペーン': {bg:'#fff0d7',fg:'#b8762b',emoji:'🎉'},
     '配信': {bg:'#e7ecff',fg:'#6373be',emoji:'📺'},
     'その他': {bg:'#f1edf3',fg:'#695878',emoji:'✦'}
   };
@@ -63,19 +62,27 @@
   }
   function shownValue(x) {return !['0','false','off','no','非表示','×'].includes(String(x??'TRUE').trim().toLowerCase());}
   const str = v => String(v == null ? '' : v).trim();
+  function normalizeCategory(value){
+    const c = str(value);
+    if(c === 'ライブ' || c === 'イベント' || c === 'live' || c === 'event') return 'ライブ・イベント';
+    if(c === 'goods' || c === 'グッズ') return 'グッズ';
+    if(c === 'campaign' || c === 'キャンペーン') return 'キャンペーン';
+    if(c === 'stream' || c === '配信') return '配信';
+    return CATS.includes(c) ? c : 'その他';
+  }
   function normalize(r) {
     const o = {};
     for(const [key,value] of Object.entries(r)) o[key.trim().toLowerCase()] = value;
-    const category = str(o.category || o['区分'] || o['カテゴリ'] || 'その他');
+    const category = normalizeCategory(o.category || o['区分'] || o['カテゴリ'] || 'その他');
     return {
-      category: CATS.includes(category) ? category : 'その他',
+      category,
       title: str(o.title || o['タイトル']),
       start: readDate(o.start_date || o['開始日']),
       end: readDate(o.end_date || o['終了日']),
       label: str(o.date_label || o['日付表示']),
       time: readTime(o.time ?? o['時刻']),place: str(o.place || o['場所']),
-      summary: str(o.summary || o['画像用の説明']),
-      details: str(o.details || o['投稿用の説明']),
+      summary: str(o.summary || o['一覧用の説明'] || o['イベント一覧用の説明'] || o['画像用の説明']),
+      details: str(o.details || o['X投稿用の説明'] || o['投稿用の説明']),
       url: str(o.url || o['公式url'] || o['url']),
       priority: Math.max(1, Math.min(9, Number(o.priority || o['優先度'] || 5) || 5)),
       show: shownValue(o.show ?? o['表示'] ?? 'TRUE')
@@ -88,7 +95,13 @@
     return `${y===Number(todayISO.slice(0,4))?'':`${y}/`}${m}/${d}(${wd})`;
   }
   function eventWhen(e) {
-    let t = e.label || (e.start ? dateText(e.start) : '日程未定');
+    const labelDate = e.label ? readDate(e.label) : '';
+    let t = '';
+    if (e.start && e.end && e.start !== e.end) t = `${dateText(e.start)}〜${dateText(e.end)}`;
+    else if (e.start) t = dateText(e.start);
+    else if (labelDate) t = dateText(labelDate);
+    else if (e.label) t = e.label;
+    else t = '日程未定';
     if (e.time) t += ` ${e.time}`;
     return t;
   }
@@ -159,7 +172,7 @@
       c.appendChild(head);
       const title=document.createElement('h3');title.textContent=e.title;c.appendChild(title);
       const when=document.createElement('div');when.className='when';when.textContent=extraInfo(e);c.appendChild(when);
-      const desc=document.createElement('div');desc.className='summary';desc.textContent=e.details || e.summary;c.appendChild(desc);
+      const desc=document.createElement('div');desc.className='summary';desc.textContent=e.summary || e.details;c.appendChild(desc);
       const url=safeUrl(e.url);if(url){const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.className='link';a.textContent='公式情報を見る';c.appendChild(a);}
       root.appendChild(c);
     }
@@ -191,9 +204,9 @@
   // Canvasで16:9のX用画像を直接生成。キャラクターは元PNGを無加工で読み込んで配置します。
   const canvas=$('poster'),ctx=canvas.getContext('2d');
   const W=1600,H=900,posterCats=[
-    {label:'ライブ出演情報',cats:['ライブ'],mark:'♪',tint:'#fdeaf3',ink:'#b46e9e'},
-    {label:'イベント出演情報',cats:['イベント'],mark:'✧',tint:'#e8effd',ink:'#758dc8'},
-    {label:'グッズ・企画情報',cats:['グッズ','キャンペーン'],mark:'♡',tint:'#f8e6f8',ink:'#a77cba'},
+    {label:'ライブ・イベント情報',cats:['ライブ・イベント'],mark:'♪',tint:'#fdeaf3',ink:'#b46e9e'},
+    {label:'キャンペーン情報',cats:['キャンペーン'],mark:'✧',tint:'#fff0d7',ink:'#b8762b'},
+    {label:'グッズ情報',cats:['グッズ'],mark:'♡',tint:'#e7f3f4',ink:'#337c88'},
     {label:'配信情報',cats:['配信','その他'],mark:'☾',tint:'#efeafd',ink:'#9079bc'}
   ];
   const originalImages={};
@@ -274,7 +287,7 @@
     strokeText(group.label,x+116,y+59,group.ink,36,w-160);
     tape(x+41,y-6,102,idx%2?'#d8e9fb':'#efcde7',idx%2?-.12:.14);
     star(x+w-32,y+10,15,'#f1d6a3');heart(x+w-57,y+77,8,'#f1cee1');
-    if(!entries.length){font(26,500,true);ctx.fillStyle='#ac95b9';ctx.textAlign='center';ctx.fillText(page?'ほかの情報をチェック！':'新しいお知らせをお楽しみに！',x+w/2,y+164);ctx.textAlign='left';return;}
+    if(!entries.length){font(26,500,true);ctx.fillStyle='#ac95b9';ctx.textAlign='center';ctx.fillText(page?'ほかの情報をチェックしてね ♡':'新しいお知らせをお楽しみに ♡',x+w/2,y+164);ctx.textAlign='left';return;}
     entries.forEach((e,k)=>{
       const itemY=y+121+k*79;
       // 本文の行間には破線を引かず、文字との重なりを防ぐ。
