@@ -274,7 +274,7 @@
     strokeText(group.label,x+116,y+59,group.ink,36,w-160);
     tape(x+41,y-6,102,idx%2?'#d8e9fb':'#efcde7',idx%2?-.12:.14);
     star(x+w-32,y+10,15,'#f1d6a3');heart(x+w-57,y+77,8,'#f1cee1');
-    if(!entries.length){font(26,500,true);ctx.fillStyle='#ac95b9';ctx.textAlign='center';ctx.fillText(page?'ほかの情報をチェックしてね ♡':'新しいお知らせをお楽しみに ♡',x+w/2,y+164);ctx.textAlign='left';return;}
+    if(!entries.length){font(26,500,true);ctx.fillStyle='#ac95b9';ctx.textAlign='center';ctx.fillText(page?'ほかの情報をチェック！':'新しいお知らせをお楽しみに！',x+w/2,y+164);ctx.textAlign='left';return;}
     entries.forEach((e,k)=>{
       const itemY=y+121+k*79;
       // 本文の行間には破線を引かず、文字との重なりを防ぐ。
