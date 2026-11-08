@@ -113,12 +113,56 @@
     if(resp?.status === 'error') throw Error((resp.errors || []).map(x=>x.message).join(' / ') || 'シート読み込みエラー');
     if(!resp?.table?.rows) throw Error('シートからデータを取得できませんでした');
     let heads = (resp.table.cols || []).map(c=>str(c.label));
-    let rawRows = resp.table.rows.map(row=>(row.c||[]).map(x=>x?.v??''));
+    // f は書式設定後の表示文字列。v が欠落したときにも確認する。
+    let rawRows = resp.table.rows.map(row=>(row.c||[]).map(x=>x?.v??x?.f??''));
     if (!heads.includes('title') && !heads.includes('タイトル') && rawRows[0]?.some(v=>v==='title'||v==='タイトル')) heads = rawRows.shift().map(str);
     if (!heads.some(x=>x==='title'||x==='タイトル')) throw Error('列名 title / タイトル が見つかりません。テンプレートを確認してください');
     return rawRows.map(values=>Object.fromEntries(heads.map((k,i)=>[k,values[i]])));
   }
-  function loadSheet(){
+  // CSV エクスポートを優先する。Visualization API (gviz) は列ごとに型を推定するため、
+  // date_label などの列に混在したテキストを null として返すことがある。
+  // CSV は元の表示文字列を保持する（セル内改行・カンマ・引用符にも対応）。
+  function parseCSV(csv){
+    const result=[];
+    let row=[],field='',quoted=false;
+    const input=String(csv).replace(/^\uFEFF/,'');
+    for(let i=0;i<input.length;i++){
+      const ch=input[i];
+      if(quoted){
+        if(ch==='"' && input[i+1]==='"'){field+='"';i++;}
+        else if(ch==='"')quoted=false;
+        else field+=ch;
+      }else if(ch==='"' && field==='')quoted=true;
+      else if(ch===','){row.push(field);field='';}
+      else if(ch==='\n' || ch==='\r'){
+        if(ch==='\r' && input[i+1]==='\n')i++;
+        row.push(field);result.push(row);row=[];field='';
+      }else field+=ch;
+    }
+    if(quoted)throw Error('CSVの引用符が閉じていません');
+    if(field!==''||row.length){row.push(field);result.push(row);}
+    return result;
+  }
+  function csvToRows(csv){
+    const rows=parseCSV(csv).filter(row=>row.some(c=>String(c).trim()!==''));
+    if(!rows.length)throw Error('シートにデータがありません');
+    const keys=rows.shift().map(h=>str(h).replace(/^\uFEFF/,''));
+    if(!keys.includes('title') && !keys.includes('タイトル'))throw Error('列名 title が見つかりません');
+    return rows.map(row=>Object.fromEntries(keys.map((key,i)=>[key,row[i]??''])));
+  }
+  async function loadSheetCSV(){
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),10000);
+    try{
+      const url=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(cfg.sheetId)}/export?format=csv&gid=${encodeURIComponent(cfg.sheetGid || '0')}&_=${Date.now()}`;
+      const response=await fetch(url,{cache:'no-store',credentials:'omit',signal:controller.signal});
+      if(!response.ok)throw Error(`CSV取得エラー (${response.status})`);
+      const content=await response.text();
+      if(/^\s*<!doctype html|^\s*<html/i.test(content))throw Error('CSVの代わりにHTMLが返りました');
+      return csvToRows(content);
+    }finally{clearTimeout(timeout);}
+  }
+  function loadSheetGviz(){
     return new Promise((resolve,reject)=>{
       const cb='__himeSheetResult';let script;let settled=false;
       const timer=setTimeout(()=>fail(Error('読み込みがタイムアウトしました（公開設定・通信状況を確認してください）')),15000);
@@ -131,6 +175,13 @@
       script.src=`https://docs.google.com/spreadsheets/d/${encodeURIComponent(cfg.sheetId)}/gviz/tq?gid=${encodeURIComponent(cfg.sheetGid || '0')}&headers=1&tqx=${tqx}&_=${Date.now()}`;
       document.head.appendChild(script);
     });
+  }
+  async function loadSheet(){
+    try{return await loadSheetCSV();}
+    catch(e){
+      console.warn('CSV経由の取得に失敗しました。従来の方式で再試行します。',e);
+      return loadSheetGviz();
+    }
   }
   let sheetLoadedAt = 0;
   let sheetLoading = false;
