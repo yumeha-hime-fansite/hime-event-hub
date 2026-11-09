@@ -201,7 +201,9 @@
     $('demo-notice').hidden=!demo;
     $('nav-site').classList.toggle('active',mode==='site');$('nav-x').classList.toggle('active',mode==='x');
     $('site-view').hidden=mode!=='site';$('x-view').hidden=mode!=='x';
-    paintFilters();paintCards();renderX();notifyEmbedHeight();
+    paintFilters();paintCards();
+    if (mode === 'x') renderX();
+    notifyEmbedHeight();
   }
   function paintFilters(){
     const root=$('filters');root.replaceChildren();
@@ -230,11 +232,10 @@
   }
   function renderX(){
     $('post-text').value=buildDraft(shown);
-    const pages=pageCount();
-    currentPage=Math.min(Math.max(currentPage,0),pages-1);
-    $('page-no').textContent=`${currentPage+1} / ${pages}`;
-    $('prev').disabled=currentPage===0;$('next').disabled=currentPage===pages-1;
-    renderPoster(currentPage,pages);
+    updatePosterLayout();
+    const labels = '夢羽ヒメさんのおしらせ 非公式ファンまとめ ライブ・配信・グッズ・キャンペーン デモ（架空） 日程未定 年月まで 日月火水木金土 0123456789()/〜♡…';
+    const glyphs = shown.flatMap(entry => [entry.category, entry.title, entry.label, entry.time, entry.place, entry.summary]).join('');
+    posterFontsReady = loadPosterFonts([...new Set(labels + glyphs)].join(''));
   }
   function buildDraft(events){
     const out=['📣#夢羽ヒメ さんのライブ・イベント・グッズ・配信情報👑💜','最新情報をまとめました！'];
@@ -252,117 +253,328 @@
     out.push('※最新情報・詳細は必ず公式告知をご確認ください。','#夢羽ヒメ');
     return out.join('\n').replace(/\n{3,}/g,'\n\n').trim();
   }
-  // Canvasで16:9のX用画像を直接生成。キャラクターは元PNGを無加工で読み込んで配置します。
-  const canvas=$('poster'),ctx=canvas.getContext('2d');
-  const W=1600,H=900,posterCats=[
-    {label:'ライブ・イベント情報',cats:['ライブ・イベント'],mark:'♪',tint:'#fdeaf3',ink:'#b46e9e'},
-    {label:'キャンペーン情報',cats:['キャンペーン'],mark:'✧',tint:'#fff0d7',ink:'#b8762b'},
-    {label:'グッズ情報',cats:['グッズ'],mark:'♡',tint:'#e7f3f4',ink:'#337c88'},
-    {label:'配信情報',cats:['配信','その他'],mark:'☾',tint:'#efeafd',ink:'#9079bc'}
-  ];
-  const originalImages={};
-  const originalImageFiles={
-    left:'assets/hime-left.png',
-    right:'assets/hime-right.png',
-    left2:'assets/hime-left2.png',
-    right2:'assets/hime-right2.png'
-  };
-  for(const [key,src] of Object.entries(originalImageFiles)){
-    const im=new Image(); im.decoding='async';
-    im.onload=()=>{
-      originalImages[key]=im;
-      if(key==='left' || key==='right'){
-        const box=document.querySelector(`.hero-art.${key}`);
-        if(box) box.classList.add('loaded');
-      }
-      renderX();
-    };
-    im.onerror=()=>{
-      if(key==='left' || key==='right') document.querySelector(`.hero-art.${key} img`)?.remove();
-    };
-    im.src=src;
-  }
-  function posterImageKey(side,page){
-    if(page>=1){
-      const secondary = `${side}2`;
-      if(originalImages[secondary]) return secondary;
-    }
-    return side;
-  }
-  function pageCount(){return Math.max(1,...posterCats.map(g=>Math.ceil(shown.filter(e=>g.cats.includes(e.category)).length/2)));}
-  function groupItems(group,page){return shown.filter(e=>group.cats.includes(e.category)).slice(page*2,page*2+2);}
   function rrect(x,y,w,h,r=15){ctx.beginPath();ctx.roundRect(x,y,w,h,r);}
   function round(x,y,w,h,r,fill,stroke='',sw=1){rrect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=sw;ctx.stroke();}}
-  function font(size,weight=700,hand=false){ctx.font=`${weight} ${size}px ${hand?'"Yomogi"':'"Zen Maru Gothic"'}, "Hiragino Maru Gothic ProN", sans-serif`;}
-  function fitText(text,maxWidth,size,min=21){text=String(text);font(size,900);let s=size;while(s>min&&ctx.measureText(text).width>maxWidth){--s;font(s,900);}if(ctx.measureText(text).width<=maxWidth)return {text,size:s};let chars=[...text];while(chars.length&&ctx.measureText(chars.join('')+'…').width>maxWidth)chars.pop();return {text:chars.join('')+'…',size:s};}
-  function strokeText(text,x,y,color,size,maxWidth,weight=900,align='left'){
-    const f=fitText(text,maxWidth,size,Math.max(20,size*.58));font(f.size,weight);
-    ctx.textAlign=align;ctx.fillStyle=color;ctx.fillText(f.text,x,y);ctx.textAlign='left';
-  }
   function star(x,y,r,color){ctx.save();ctx.translate(x,y);ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(0,-r);ctx.quadraticCurveTo(r*.18,-r*.18,r,0);ctx.quadraticCurveTo(r*.18,r*.18,0,r);ctx.quadraticCurveTo(-r*.18,r*.18,-r,0);ctx.quadraticCurveTo(-r*.18,-r*.18,0,-r);ctx.fill();ctx.restore();}
-  function flower(x,y,r,c){ctx.save();ctx.translate(x,y);ctx.fillStyle=c;for(let i=0;i<5;i++){ctx.save();ctx.rotate(2*Math.PI*i/5);ctx.beginPath();ctx.ellipse(0,-r*.55,r*.34,r*.55,0,0,2*Math.PI);ctx.fill();ctx.restore();}ctx.beginPath();ctx.arc(0,0,r*.22,0,2*Math.PI);ctx.fillStyle='#fae6b7';ctx.fill();ctx.restore();}
-  function heart(x,y,r,c){ctx.save();ctx.translate(x,y);ctx.fillStyle=c;ctx.beginPath();ctx.moveTo(0,r);ctx.bezierCurveTo(-r*1.8,-r*.2,-r*.7,-r*1.3,0,-r*.55);ctx.bezierCurveTo(r*.7,-r*1.3,r*1.8,-r*.2,0,r);ctx.fill();ctx.restore();}
   function tape(x,y,w,color,ang=0){ctx.save();ctx.translate(x+w/2,y+12);ctx.rotate(ang);ctx.globalAlpha=.8;round(-w/2,-11,w,23,1,color);ctx.strokeStyle='#ffffffb4';ctx.lineWidth=1.6;for(let a=-w/2+8;a<w/2;a+=14){ctx.beginPath();ctx.moveTo(a,-11);ctx.lineTo(a+8,12);ctx.stroke();}ctx.restore();}
-  function drawOriginal(side,x,y,maxW,maxH,page=0){
-    const key = posterImageKey(side,page);
-    const img = originalImages[key] || originalImages[side];
-    if(!img){star(x+maxW/2,y+maxH/2,20,'#dec0ed');heart(x+maxW/2+32,y+maxH/2+27,12,'#f0bfdc');return;}
-    const scale=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight),w=img.naturalWidth*scale,h=img.naturalHeight*scale;
-    ctx.drawImage(img,x+(maxW-w)/2,y+(maxH-h)/2,w,h);
+  // X用画像は、日付順の行を収まる高さに合わせてページに分ける。
+  const canvas = $('poster'), ctx = canvas.getContext('2d');
+  const W = 1200, H = 1500, BODY_TOP = 249, BODY_END = 1403;
+  const INFO_X = 343, INFO_WIDTH = 787, DATE_WIDTH = 240;
+  const TITLE_SIZE = 49, DATE_SIZE = 48, META_SIZE = 42;
+  const TITLE_LINE = 55, DATE_LINE = 54, META_LINE = 50, MIN_ROW_HEIGHT = 126;
+  const MAX_ROWS = 9, POSTER_FONT = '"M PLUS Rounded 1c", "Zen Maru Gothic", sans-serif';
+  const POSTER_COLORS = {
+    ink: '#3e2a4c', purple: '#653e80', muted: '#564761',
+    deadline: '#793759', divider: '#cbb1d3',
+  };
+  const POSTER_TAGS = {
+    'ライブ・イベント': ['#f8e1ee', '#7a385f'],
+    'グッズ': ['#dff1ed', '#275f56'],
+    'キャンペーン': ['#faedd2', '#6f481e'],
+    '配信': ['#eee3f8', '#624384'],
+    'その他': ['#f1edf3', '#695878'],
+  };
+  let posterPages = [[]];
+  let posterFontsReady = Promise.resolve();
+  let exporting = false;
+  const originalImages = {};
+  const posterImagesReady = Promise.all(Object.entries({
+    left: 'assets/hime-left.png',
+    right: 'assets/hime-right.png',
+    left2: 'assets/hime-left2.png',
+    right2: 'assets/hime-right2.png',
+  }).map(([key, src]) => new Promise(resolve => {
+    const image = new Image();
+    image.decoding = 'async';
+    const hero = key === 'left' || key === 'right' ? document.querySelector(`.hero-art.${key}`) : null;
+    image.onload = () => {
+      originalImages[key] = image;
+      hero?.classList.add('loaded');
+      resolve();
+      if (mode === 'x' && !exporting) drawPosterPreview();
+    };
+    image.onerror = () => {
+      hero?.querySelector('img')?.remove();
+      resolve();
+    };
+    image.src = src;
+  })));
+
+  function posterEntry(event) {
+    const date = event.end || event.start || readDate(event.label);
+    const deadline = Boolean(event.end && event.end !== event.start);
+    const recurring = !date && /(?:毎[日週月年]|隔週|定期)/.test(event.label);
+    const label = date ? dateText(date).replace(/^(\d{4})\//, '$1年\n') : event.label || '日程未定';
+    const time = deadline ? `${event.time}まで` : event.time;
+    const from = deadline && event.start ? `${dateText(event.start)}〜` : '';
+    const note = [from, event.place || event.summary].filter(Boolean).join('・');
+    return { ...event, date, deadline, recurring, label, time, note };
   }
-  function posterBackground(page,pages){
-    const grad=ctx.createLinearGradient(0,0,W,H);grad.addColorStop(0,'#f3e5fb');grad.addColorStop(.58,'#f9f0ff');grad.addColorStop(1,'#f7e3f3');ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
-    // Soft notebook grid and non-repeating handmade flecks.
-    ctx.strokeStyle='#d7c2e82a';ctx.lineWidth=1;for(let x=0;x<W;x+=31){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}for(let y=0;y<H;y+=31){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-    for(let j=0;j<38;j++){const x=(j*139+67)%W,y=(j*97+113)%H;star(x,y,3+(j%3),j%2?'#dcb6df88':'#b6cde888');}
-    round(25,20,1550,860,35,'#ffffff5c','#e8cdec',4);
-    // Header handwritten memo and cloud-like title plaque.
-    round(216,27,1168,190,58,'#fffdfa','#ddc3ee',4);
-    ctx.save();ctx.setLineDash([11,11]);rrect(226,37,1148,168,48);ctx.strokeStyle='#f4d5ef';ctx.lineWidth=3;ctx.stroke();ctx.restore();
-    drawOriginal('left',35,30,185,180,page);drawOriginal('right',1380,30,185,180,page);
-    font(48,900);ctx.textAlign='center';ctx.fillStyle='#8663aa';ctx.fillText('夢羽ヒメ',800,99);
-    strokeText('ライブ・イベント・グッズ情報',800,162,'#77539c',60,1030,900,'center');
-    font(25,400,true);ctx.fillStyle='#ad7aaf';ctx.fillText('♡ unofficial fan info ♡',800,202);ctx.textAlign='left';
-    star(270,67,15,'#eed19e');star(1336,136,17,'#e7afc9');flower(178,187,22,'#deade2');flower(1438,194,25,'#dbbcf0');heart(330,187,13,'#eac6df');heart(1280,70,11,'#eac6df');
-    tape(420,30,88,'#eed3f2',-.21);tape(1176,37,87,'#e3d9f8',.17);
+
+  function setPosterFont(size) {
+    ctx.font = `400 ${size}px ${POSTER_FONT}`;
   }
-  function paperPanel(x,y,w,h,group,entries,idx,page){
-    ctx.save();ctx.shadowColor='#ad87c766';ctx.shadowBlur=15;ctx.shadowOffsetY=8;
-    round(x,y,w,h,28,'#fffdfb','#ddc8e9',3);ctx.restore();
-    // Faint notebook ruling, using clipping so it stays within the note.
-    ctx.save();rrect(x+6,y+6,w-12,h-12,23);ctx.clip();ctx.strokeStyle='#e6d7ed54';ctx.lineWidth=1;for(let yy=y+90;yy<y+h-10;yy+=29){ctx.beginPath();ctx.moveTo(x+19,yy);ctx.lineTo(x+w-20,yy);ctx.stroke();}ctx.restore();
-    // Color label on a paper sticker.
-    round(x+24,y+15,w-48,64,27,group.tint);
-    ctx.save();ctx.setLineDash([5,7]);rrect(x+26,y+17,w-52,60,25);ctx.strokeStyle='#c9adda';ctx.lineWidth=2;ctx.stroke();ctx.restore();
-    strokeText(group.mark,x+53,y+57,group.ink,40,62);
-    strokeText(group.label,x+116,y+59,group.ink,36,w-160);
-    tape(x+41,y-6,102,idx%2?'#d8e9fb':'#efcde7',idx%2?-.12:.14);
-    star(x+w-32,y+10,15,'#f1d6a3');heart(x+w-57,y+77,8,'#f1cee1');
-    if(!entries.length){font(26,500,true);ctx.fillStyle='#ac95b9';ctx.textAlign='center';ctx.fillText(page?'ほかの情報をチェックしてね ♡':'新しいお知らせをお楽しみに ♡',x+w/2,y+164);ctx.textAlign='left';return;}
-    entries.forEach((e,k)=>{
-      const itemY=y+121+k*79;
-      // 本文の行間には破線を引かず、文字との重なりを防ぐ。
-      heart(x+41,itemY-10,10,group.ink);
-      const text=fitText(e.title,w-119,32,23);font(text.size,900);ctx.fillStyle='#655073';ctx.fillText(text.text,x+69,itemY);
-      let when=eventWhen(e);if(e.place)when+='　⌖ '+e.place;
-      const sub=fitText(when,w-104,25,21);font(sub.size,700);ctx.fillStyle='#987ca4';ctx.fillText(sub.text,x+70,itemY+32);
+
+  function wrapPosterText(text, width, limit, firstWidth = width) {
+    if (!text) return [];
+    const lines = [];
+    let line = '';
+    for (const paragraph of text.split(/\r?\n/)) {
+      for (const char of paragraph) {
+        if (line && ctx.measureText(line + char).width > (lines.length ? width : firstWidth)) {
+          lines.push(line.trimEnd());
+          line = '';
+        }
+        if (line || char.trim()) line += char;
+      }
+      lines.push(line.trimEnd());
+      line = '';
+    }
+    if (lines.length > limit) {
+      lines.length = limit;
+      const chars = Array.from(lines[limit - 1]);
+      const available = limit === 1 ? firstWidth : width;
+      while (chars.length && ctx.measureText(chars.join('') + '…').width > available) chars.pop();
+      lines[limit - 1] = chars.join('').trimEnd() + '…';
+    }
+    return lines;
+  }
+
+  function measurePosterRow(entry) {
+    setPosterFont(TITLE_SIZE);
+    const titles = wrapPosterText(entry.title, INFO_WIDTH - 2, 8);
+    setPosterFont(DATE_SIZE);
+    const dates = wrapPosterText(entry.label, DATE_WIDTH - 8, 4);
+    setPosterFont(META_SIZE);
+    const times = wrapPosterText(entry.time, DATE_WIDTH, 2);
+    const badgeWidth = Math.ceil(ctx.measureText(entry.category).width) + 16;
+    const notes = wrapPosterText(entry.note, INFO_WIDTH, 2, INFO_WIDTH - badgeWidth - 10);
+    const dateHeight = dates.length * DATE_LINE + times.length * META_LINE;
+    const titleHeight = titles.length * TITLE_LINE + Math.max(1, notes.length) * META_LINE + 3;
+    const height = Math.max(MIN_ROW_HEIGHT, dateHeight + 18, titleHeight + 18);
+    return { ...entry, titles, dates, times, notes, badgeWidth, dateHeight, titleHeight, height };
+  }
+
+  function planPosterPages(events) {
+    const rows = events.map(posterEntry).sort((a, b) =>
+      Number(a.recurring) - Number(b.recurring)
+      || (a.date || '9999').localeCompare(b.date || '9999')
+      || (a.time || '99:99').localeCompare(b.time || '99:99')
+      || a.priority - b.priority
+    ).map(measurePosterRow);
+    if (!rows.length) return [[]];
+
+    // 収まる分割のうち、最小ページ数を求める。次に件数を均し、同日の分断を避ける。
+    const ends = rows.map(() => []);
+    const minPages = new Array(rows.length + 1).fill(Infinity);
+    minPages[rows.length] = 0;
+    for (let start = rows.length - 1; start >= 0; start--) {
+      let height = 0;
+      for (let end = start; end < rows.length && end < start + MAX_ROWS; end++) {
+        height += rows[end].height;
+        if (height > BODY_END - BODY_TOP) break;
+        ends[start].push(end + 1);
+        minPages[start] = Math.min(minPages[start], 1 + minPages[end + 1]);
+      }
+    }
+    const pages = [];
+    for (let start = 0; start < rows.length;) {
+      const target = Math.ceil((rows.length - start) / minPages[start]);
+      let bestEnd = start + 1;
+      let bestScore = Infinity;
+      for (const end of ends[start]) {
+        if (1 + minPages[end] !== minPages[start]) continue;
+        const sameDay = Boolean(rows[end]?.date && rows[end].date === rows[end - 1].date);
+        const score = Math.abs(end - start - target) + (sameDay ? 1.1 : 0);
+        if (score <= bestScore) {
+          bestEnd = end;
+          bestScore = score;
+        }
+      }
+      pages.push(rows.slice(start, bestEnd));
+      start = bestEnd;
+    }
+    return pages;
+  }
+
+  function posterText(value, x, y, size, color, weight = 500, align = 'left') {
+    if (!value) return;
+    setPosterFont(size);
+    ctx.textAlign = align;
+    ctx.textBaseline = 'alphabetic';
+    const top = ctx.measureText(value).actualBoundingBoxAscent ?? size * .82;
+    if (weight >= 700) {
+      ctx.strokeStyle = color;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = size >= 80 ? 4 : 2;
+      ctx.strokeText(value, x, y + top);
+    }
+    ctx.fillStyle = color;
+    ctx.fillText(value, x, y + top);
+  }
+
+  function drawOriginal(side, x, y, maxW, maxH, page) {
+    const image = (page > 0 && originalImages[side + '2']) || originalImages[side];
+    if (!image) {
+      star(x + maxW / 2, y + maxH / 2, 20, '#dec0ed');
+      return;
+    }
+    const scale = Math.min(maxW / image.naturalWidth, maxH / image.naturalHeight);
+    const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+    ctx.drawImage(image, x + (maxW - width) / 2, y + (maxH - height) / 2, width, height);
+  }
+
+  function posterBackground(page) {
+    ctx.fillStyle = '#eee3f4';
+    ctx.fillRect(0, 0, W, H);
+    for (let x = 0; x < W; x += 68) {
+      ctx.fillStyle = '#e9d8f0';
+      ctx.fillRect(x, 0, 30, H);
+      ctx.fillStyle = '#e0cce9';
+      for (let y = 0; y < H; y += 68) ctx.fillRect(x, y, 30, 30);
+    }
+    ctx.fillStyle = '#f4eaf6';
+    for (let y = 33; y < H; y += 68) ctx.fillRect(0, y, W, 2);
+
+    round(40, 44, 1120, 1423, 45, '#d9c3e7');
+    round(35, 32, 1129, 1428, 45, '#fffaf4', '#c9afd9', 3);
+    round(53, 48, 1093, 1394, 36, '#fffaf4', '#ecdce8', 2);
+    for (const [x, color] of [[166, '#f5e8f7'], [1028, '#f6e9f4']]) {
+      ctx.beginPath();
+      ctx.ellipse(x, 150, 83, 66, 0, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+    for (const [x, y, size, color] of [
+      [272, 135, 15, '#c693c0'], [310, 101, 9, '#d4a567'],
+      [895, 107, 12, '#ca98c5'], [927, 152, 16, '#d8af73'],
+      [268, 184, 6, '#dbb8da'], [898, 181, 7, '#d6b6db'],
+    ]) star(x, y, size, color);
+
+    round(414, 45, 372, 49, 22, '#f2e2f2');
+    posterText('夢羽ヒメさんの', 600, 48, 46, POSTER_COLORS.purple, 700, 'center');
+    posterText('おしらせ', 600, 104, 92, '#6c4186', 700, 'center');
+    ctx.beginPath();
+    ctx.moveTo(369, 183);
+    ctx.quadraticCurveTo(600, 212, 829, 183);
+    ctx.strokeStyle = '#e5bad5';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    posterText('非公式ファンまとめ', 600, 202, 40, POSTER_COLORS.muted, 400, 'center');
+    drawOriginal('left', 63, 54, 195, 195, page);
+    drawOriginal('right', 936, 53, 197, 197, page);
+    tape(64, 19, 160, '#e0bbdd', -.23);
+    tape(959, 17, 160, '#d8c4eb', .19);
+    ctx.fillStyle = '#e6d3e8';
+    ctx.fillRect(80, 243, 1040, 2);
+    ctx.fillStyle = '#dac3e2';
+    for (let y = 263; y < 1387; y += 15) ctx.fillRect(77, y, 2, 7);
+  }
+
+  function drawPosterRow(row, y, height, divider) {
+    if (row.recurring) round(64, y + 4, 1070, height - 8, 24, '#f2e7f5');
+    const dateY = y + (height - row.dateHeight) / 2 + 5;
+    const dateInk = row.deadline ? POSTER_COLORS.deadline : POSTER_COLORS.purple;
+    round(91, dateY - 5, DATE_WIDTH, row.dates.length * DATE_LINE - 3, 18,
+      row.deadline ? '#f9e6eb' : '#f0e3f3');
+    row.dates.forEach((line, i) =>
+      posterText(line, 211, dateY + i * DATE_LINE, DATE_SIZE, dateInk, 700, 'center')
+    );
+    row.times.forEach((line, i) =>
+      posterText(line, 211, dateY + row.dates.length * DATE_LINE - 2 + i * META_LINE,
+        META_SIZE, dateInk, 700, 'center')
+    );
+    star(78, y + height / 2, 10, row.deadline ? '#c68da9' : '#bb97d0');
+
+    const titleY = y + (height - row.titleHeight) / 2;
+    row.titles.forEach((line, i) =>
+      posterText(line, INFO_X, titleY + i * TITLE_LINE, TITLE_SIZE, POSTER_COLORS.ink, 700)
+    );
+    const metaY = titleY + row.titles.length * TITLE_LINE + 3;
+    const [badgeBg, badgeInk] = POSTER_TAGS[row.category];
+    round(INFO_X, metaY, row.badgeWidth, 48, 4, badgeBg);
+    posterText(row.category, INFO_X + 8, metaY + 4, META_SIZE, badgeInk, 700);
+    row.notes.forEach((line, i) =>
+      posterText(line, i ? INFO_X : INFO_X + row.badgeWidth + 10,
+        metaY + 4 + i * META_LINE, META_SIZE, POSTER_COLORS.muted, 400)
+    );
+    if (divider) {
+      ctx.fillStyle = POSTER_COLORS.divider;
+      for (let x = INFO_X; x < 1114; x += 16) ctx.fillRect(x, y + height - 1, 7, 3);
+    }
+  }
+
+  function renderPoster(page, pages = posterPages) {
+    ctx.clearRect(0, 0, W, H);
+    posterBackground(page);
+    const rows = pages[page];
+    const extra = rows.length ? (BODY_END - BODY_TOP - rows.reduce((total, row) => total + row.height, 0)) / rows.length : 0;
+    // 少ない件数を必要以上に引き伸ばさず、中央に配置する。
+    const padding = Math.min(extra, 44);
+    let y = BODY_TOP + Math.max(0, extra - padding) * rows.length / 2;
+    rows.forEach((row, i) => {
+      const height = row.height + padding;
+      drawPosterRow(row, y, height, i < rows.length - 1);
+      y += height;
     });
+    if (!rows.length) {
+      posterText('現在、表示するお知らせはありません。', 600, 760, 44, POSTER_COLORS.muted, 400, 'center');
+    }
+    posterText('♡ ライブ・配信・グッズ・キャンペーン', 78, 1414, 37, POSTER_COLORS.muted, 400);
+    const pageLabel = [demo ? 'デモ（架空）' : '', pages.length > 1 ? `${page + 1} / ${pages.length}` : ''].filter(Boolean).join('　');
+    posterText(pageLabel, 1122, 1414, 37, POSTER_COLORS.muted, 400, 'right');
   }
-  function renderPoster(page,pages){
-    ctx.clearRect(0,0,W,H);posterBackground(page,pages);
-    const spots=[[44,252],[817,252],[44,552],[817,552]],pw=740,ph=266;
-    posterCats.forEach((g,i)=>paperPanel(spots[i][0],spots[i][1],pw,ph,g,groupItems(g,page),i,page));
-    ctx.fillStyle='#a489b6';font(19,700);ctx.fillText('※ ファンによる非公式まとめ。最新情報・詳細は公式告知をご確認ください。',58,862);
-    ctx.textAlign='right';font(21,400,true);ctx.fillStyle='#a585b6';ctx.fillText('♡ 夢羽ヒメ fan page',1534,864);ctx.textAlign='left';
-    if(demo){ctx.save();ctx.translate(1408,65);ctx.rotate(.12);round(-8,-23,127,43,9,'#fff1e2','#eac0a5',2);font(23,900);ctx.fillStyle='#a9737c';ctx.fillText('DEMO',4,7);ctx.restore();}
+
+  function drawPosterPreview() {
+    currentPage = Math.min(currentPage, posterPages.length - 1);
+    $('page-no').textContent = `${currentPage + 1} / ${posterPages.length}`;
+    $('prev').disabled = exporting || currentPage === 0;
+    $('next').disabled = exporting || currentPage === posterPages.length - 1;
+    $('download').disabled = exporting;
+    $('download-all').disabled = exporting;
+    $('download-all').hidden = posterPages.length === 1;
+    renderPoster(currentPage);
   }
-  async function downloadPage(n){
-    await document.fonts.ready;
-    const count=pageCount();renderPoster(n,count);
-    return new Promise(resolve=>canvas.toBlob(blob=>{
-      if(!blob){showAlert('画像を作成できませんでした。');resolve();return;}
-      const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=`yumeha-hime-info-${todayISO}-${n+1}.png`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),10000);resolve();
-    },'image/png'));
+
+  function updatePosterLayout() {
+    posterPages = planPosterPages(shown);
+    if (!exporting) drawPosterPreview();
+  }
+
+  async function loadPosterFonts(text) {
+    await document.fonts.load('400 49px "M PLUS Rounded 1c"', text).catch(() => []);
+    updatePosterLayout();
+  }
+
+  async function downloadPoster(all) {
+    if (exporting) return;
+    exporting = true;
+    drawPosterPreview();
+    const selected = currentPage;
+    try {
+      await Promise.all([posterFontsReady, posterImagesReady]);
+      const pages = posterPages;
+      const indices = all ? pages.map((_, i) => i) : [Math.min(selected, pages.length - 1)];
+      for (const index of indices) {
+        renderPoster(index, pages);
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!blob) throw Error('PNGの生成に失敗しました');
+        const url = URL.createObjectURL(blob), link = document.createElement('a');
+        link.href = url;
+        link.download = `yumeha-hime-info-${todayISO}-${index + 1}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
+    } catch (error) {
+      showAlert('画像を作成できませんでした。ページを再読み込みしてもう一度お試しください。');
+      console.error(error);
+    } finally {
+      exporting = false;
+      drawPosterPreview();
+    }
   }
   // Embed mode: measure the content, not document.scrollHeight.
   // document.scrollHeight can reflect iframe viewport height and create an
@@ -391,13 +603,10 @@
     window.addEventListener('load',notifyEmbedHeight);
   }
   function bind(){
-    $('prev').addEventListener('click',()=>{if(currentPage>0){currentPage--;renderX();}});
-    $('next').addEventListener('click',()=>{if(currentPage<pageCount()-1){currentPage++;renderX();}});
-    $('download').addEventListener('click',async()=>{await downloadPage(currentPage);renderX();});
-    $('download-all').addEventListener('click',async()=>{
-      const old=currentPage,pc=pageCount();
-      for(let i=0;i<pc;i++){await downloadPage(i);}currentPage=old;renderX();
-    });
+    $('prev').addEventListener('click', () => { if (currentPage > 0) { currentPage--; drawPosterPreview(); } });
+    $('next').addEventListener('click', () => { if (currentPage < posterPages.length - 1) { currentPage++; drawPosterPreview(); } });
+    $('download').addEventListener('click', () => downloadPoster(false));
+    $('download-all').addEventListener('click', () => downloadPoster(true));
     $('copy').addEventListener('click',async()=>{
       const value=$('post-text').value;try{await navigator.clipboard.writeText(value);$('copy-status').textContent='コピーしました';}
       catch{const el=$('post-text');el.focus();el.select();$('copy-status').textContent='文章を選択しました。コピーしてください';}
@@ -425,7 +634,7 @@
   }
   function init(){
     bind();
-    document.fonts.ready.then(()=>renderX());
+    if (mode === 'x') renderX();
     if(demo){items=DEMO.map(normalize);render();return;}
     refreshSheet(true); // 初回ロードは必ず取得
     // 定期ポーリングはしない。初回・通常再読込・タブ復帰時だけ取得する。
